@@ -1,4 +1,5 @@
 #["rtts", "urhi", 'etc', 'custom']
+# Add --config.eval.compute_iqa True if you also want BRISQUE / NIMA / MUSIQ / PAQ2PIQ.
 python ./dehaze_sampling.py \
     --config ./configs/rectified_flow/cifar10_rf_gaussian.py  \
     --config.data.dataset "custom" \

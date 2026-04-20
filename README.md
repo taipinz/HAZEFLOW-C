@@ -43,6 +43,12 @@ conda env create -f environment.yaml
 Checkpoints can be downloaded [here](https://drive.google.com/file/d/1m8OVRi-3m7-u0bGWFS5W2ZpZM06XyLJd/view?usp=sharing).
 
 Visual Results can be downloaded [here](https://drive.google.com/drive/folders/1aO9CoX8oo8EUPPrdimLtHSuHME6E9dWP?usp=sharing).
+
+If you want to choose specific GPUs, set `CUDA_VISIBLE_DEVICES` before running the training scripts, for example:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 sh pretrain.sh
+```
 ## 🌫️ Haze Generation
 <p align="center">
   <img src="assets/mcbm.png" alt="mcbm" width="800"/>
@@ -104,14 +110,25 @@ Specify the checkpoint obtained from the reflow phase by editing `--config.flow.
 sh distill.sh
 ```
 
+All training stages read their dataset root from the corresponding config flag, for example `--config.data.custom_data_root`.
+
 ## Inference & Demo
 
-To run inference on your own images, place them in the `dataset/custom/` directory.
+To run inference on your own images, place them in the `datasets/custom/` directory.
 
 Then, configure the following options in `sampling.sh`:
 - `--config.sampling.ckpt`: path to your trained model checkpoint
-- `--config.data.dataset`: name of your dataset (`rtts` or `custom`)
+- `--config.data.dataset`: name of your dataset (`rtts`, `urhi`, or `custom`)
 - `--config.data.test_data_root`: path to your input images
+- `--config.sampling.use_ode_sampler`: sampler to use (`asm_one_step` or `asm_N_step`)
+
+IQA evaluation is optional during inference. To enable BRISQUE / NIMA / MUSIQ / PAQ2PIQ scoring, add:
+
+```bash
+--config.eval.compute_iqa True
+```
+
+When IQA is enabled, the aggregated scores are also written to `samples/<expr>/iqa_metrics.txt`.
 
 Finally, run:
 ```bash

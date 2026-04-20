@@ -3,3 +3,9 @@ MCBM.py
 __pycache__/
 **/__pycache__/
 *.py[cod]
+.codex
+datasets/
+results/
+samples/
+*.pth
+*.log

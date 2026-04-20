@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=2,5 python ./train.py \
+python ./train.py \
     --config ./configs/rectified_flow/cifar10_rf_gaussian.py \
     --config.model.name 'hazeflow' \
     --config.work_dir 'results' \

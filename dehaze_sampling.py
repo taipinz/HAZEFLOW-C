@@ -14,19 +14,23 @@ from reflow.utils import restore_checkpoint, seed_everywhere, save_image_batch
 from reflow import RectifiedFlow
 from reflow import losses as losses
 from reflow import sampling as sampling
-import torch.nn.functional as F 
-import pyiqa
-
-brisque = pyiqa.create_metric('brisque')
-nima = pyiqa.create_metric('nima', base_model_name='vgg16', train_dataset='ava', num_classes=10)
-musiq = pyiqa.create_metric('musiq')
-paq2piq = pyiqa.create_metric('paq2piq')
-extensions = ['*.jpg', '*.jpeg', '*.JPEG', '*.png', '*.bmp']
+import torch.nn.functional as F
 
 FLAGS = flags.FLAGS
 
 config_flags.DEFINE_config_file(
     "config", None, "Training configuration.", lock_config=True)
+
+
+def create_iqa_metrics():
+    import pyiqa
+
+    return {
+        'brisque': pyiqa.create_metric('brisque'),
+        'nima': pyiqa.create_metric('nima', base_model_name='vgg16', train_dataset='ava', num_classes=10),
+        'musiq': pyiqa.create_metric('musiq'),
+        'paq2piq': pyiqa.create_metric('paq2piq'),
+    }
 
 def main(argv):
     config = FLAGS.config
@@ -76,16 +80,16 @@ def main(argv):
     
     ema.copy_to(score_model.parameters())
     
-    sampling_shape = (config.sampling.batch_size, config.data.num_channels,
-                config.data.image_size, config.data.image_size)
-    
-    sampling_fn_n1 = sampling.get_flow_sampler(flow, device=device, use_ode_sampler='asm_N_step')    
+    sampling_fn_n1 = sampling.get_flow_sampler(
+        flow,
+        device=device,
+        use_ode_sampler=config.sampling.use_ode_sampler,
+    )
     
     sample_dir = os.path.join(config.work_dir, config.expr) # '/data/RF/samples/URHI_20step/'
-    sum_nima = 0
-    sum_brisque = 0
-    sum_musiq = 0
-    sum_paq2piq = 0
+    compute_iqa = config.eval.compute_iqa
+    metrics = create_iqa_metrics() if compute_iqa else None
+    metric_sums = {metric_name: 0.0 for metric_name in metrics} if metrics is not None else {}
     count = 0
     for idx, batch in enumerate(dataloader): 
         seed_everywhere(config.seed)
@@ -131,16 +135,11 @@ def main(argv):
             os.makedirs(os.path.join(this_sample_dir,name.split('/')[0]), exist_ok=True)
 
         save_image_batch(sample_n1, config.data.image_size, this_sample_dir, log_name=name)  
-        image = sample_n1
-        dist_brisque = brisque(image)
-        dist_nima = nima(image)
-        dist_musiq = musiq(image)
-        dist_paq2piq = paq2piq(image)
-        sum_brisque += dist_brisque
-        sum_nima += dist_nima
-        sum_musiq += dist_musiq
-        sum_paq2piq += dist_paq2piq
-        count += 1
+        if metrics is not None:
+            image = sample_n1
+            for metric_name, metric_fn in metrics.items():
+                metric_sums[metric_name] += float(metric_fn(image))
+            count += 1
 
         # this_pred_t_dir = os.path.join(sample_dir,'pred_t')
         # os.makedirs(this_pred_t_dir, exist_ok=True)
@@ -149,10 +148,17 @@ def main(argv):
         # this_dcp_t_dir = os.path.join(sample_dir,'dcp_t')
         # os.makedirs(this_dcp_t_dir, exist_ok=True)
         # save_image_batch(t, config.data.image_size, this_dcp_t_dir, log_name=name)       
-    print('Average BRISQUE: %.4f'%(sum_brisque/count))
-    print('Average NIMA: %.4f'%(sum_nima/count))
-    print('Average MUSIQ: %.4f'%(sum_musiq/count))
-    print('Average PAQ2PIQ: %.4f'%(sum_paq2piq/count))
+    if metrics is not None and count > 0:
+        metric_lines = []
+        for metric_name, metric_sum in metric_sums.items():
+            metric_value = metric_sum / count
+            metric_lines.append(f'Average {metric_name.upper()}: {metric_value:.4f}')
+        metrics_path = os.path.join(sample_dir, 'iqa_metrics.txt')
+        with open(metrics_path, 'w') as metric_file:
+            metric_file.write('\n'.join(metric_lines) + '\n')
+        for line in metric_lines:
+            print(line)
+        print(f'Saved IQA summary to {metrics_path}')
         
 
 if __name__ == "__main__":

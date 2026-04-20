@@ -103,7 +103,7 @@ def main(argv):
         checkpoint = torch.load(config.flow.pre_train_model, map_location=device)
         try:
             score_model.load_state_dict(checkpoint['model'], strict=False)
-        except:
+        except RuntimeError:
             checkpoint['model'] = mutils.load_mismatch_state_dict(score_model, checkpoint['model'])
             score_model.load_state_dict(checkpoint['model'], strict=False)
         ema = ExponentialMovingAverage(score_model.parameters(), decay=config.model.ema_rate)
@@ -139,11 +139,16 @@ def main(argv):
     if config.training.snapshot_sampling:
         sampling_shape = (config.sampling.batch_size, config.data.num_channels,
                         config.data.image_size, config.data.image_size)
-        sampling_fn_n1 = sampling.get_flow_sampler(flow, device=device, use_ode_sampler='asm_N_step')
+        sampling_fn_n1 = sampling.get_flow_sampler(
+            flow,
+            device=device,
+            use_ode_sampler=config.sampling.use_ode_sampler,
+        )
 
     #################### train ####################
     optimize_fn = losses.optimization_manager(config)
     train_loss_values = []
+    data_iterator = iter(data_loader)
     if config.training.progress:
         from tqdm import tqdm
         pbar = tqdm(range(config.training.n_iters))
@@ -158,7 +163,7 @@ def main(argv):
         for _ in range(config.training.accumulation_steps):
             try:
                 batch = next(data_iterator)
-            except:
+            except StopIteration:
                 data_iterator = iter(data_loader)
                 batch = next(data_iterator)
             label = None

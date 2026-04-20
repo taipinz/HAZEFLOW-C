@@ -6,8 +6,8 @@ from PIL import Image
 import os
 import logging
 import torchvision.transforms.functional as F
-import torchvision.transforms as transforms 
-import cv2 
+import torchvision.transforms as transforms
+import cv2
 import random
 from scipy.linalg import orth
 from typing import Any
@@ -82,7 +82,11 @@ def img2tensor(imgs, bgr2rgb=True, float32=True):
     
 join = os.path.join
 
-extensions = ['.jpg', '.jpeg', '.JPEG', '.png', '.bmp']
+extensions = {'.jpg', '.jpeg', '.png', '.bmp'}
+
+
+def is_image_file(filename):
+    return os.path.splitext(filename)[1].lower() in extensions
 
 def get_data_scaler(config):
   """Data normalizer. Assume data are always in [0, 1]."""
@@ -108,9 +112,9 @@ def get_dataset(config, phase="train"):
     elif config.data.dataset=='reflow':
         dataset = REFLOW(config.data.custom_data_root)      
     elif config.data.dataset=='distill': 
-        dataset = DISTILL(data_root='datasets/URHI/')
+        dataset = DISTILL(data_root=config.data.custom_data_root)
     elif config.data.dataset=='reals':
-        dataset = Reals(data_root='./datasets/')
+        dataset = Reals(data_root=config.data.custom_data_root or './datasets/')
         
     else:
         # TODO: add other datasets
@@ -125,7 +129,8 @@ def get_dataset(config, phase="train"):
 def get_test_dataloader(config=None, phase='test', dataset_name='example'): 
     # dataset = ImageTranslationDataset(config.data.custom_data_root, phase='test')
     if dataset_name.lower()=='urhi': 
-        dataset = URHI('datasets/URHI/', phase='test')
+        data_root = config.data.test_data_root if config is not None and config.data.test_data_root else 'datasets/URHI/'
+        dataset = URHI(data_root)
     else:
         dataset = Example(config.data.test_data_root)
     dataloader = torch.utils.data.DataLoader(dataset, 
@@ -156,7 +161,7 @@ class Example(Dataset):
     def __init__(self, data_root, Fattal=None): 
         self.data_root = data_root
         
-        self.imgs = os.listdir(self.data_root)
+        self.imgs = [x for x in sorted(os.listdir(self.data_root)) if is_image_file(x)]
         
         self.img_list = [os.path.join(self.data_root, x) for x in self.imgs]
 
@@ -292,7 +297,7 @@ class RTTS(Dataset):
             
         
         
-        self.imgs = sorted(os.listdir(self.hazy_root))
+        self.imgs = [x for x in sorted(os.listdir(self.hazy_root)) if is_image_file(x)]
         # self.dcps = sorted(os.listdir(self.dcp_root)) 
         if depth: 
             self.depths = sorted(os.listdir(self.depth_root))
@@ -328,7 +333,7 @@ class URHI(Dataset):
         # self.dcp_root = os.path.join(data_root, 'dcp')
         
         
-        self.imgs = sorted(os.listdir(self.hazy_root))
+        self.imgs = [x for x in sorted(os.listdir(self.hazy_root)) if is_image_file(x)]
         # self.dcps = sorted(os.listdir(self.dcp_root)) 
         
         self.img_list = [os.path.join(self.hazy_root, x) for x in self.imgs]
@@ -354,7 +359,7 @@ class DISTILL(Dataset):
     def __init__(self, data_root): 
         self.hazy_root = os.path.join(data_root, 'hazy')
         
-        self.imgs = sorted(os.listdir(self.hazy_root))
+        self.imgs = [x for x in sorted(os.listdir(self.hazy_root)) if is_image_file(x)]
         
         self.img_list = [os.path.join(self.hazy_root, x) for x in self.imgs]
                 
